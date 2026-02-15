@@ -29,10 +29,12 @@
       "Controllers": ["Keypad"],
       "States": [
         {
-          "Image": "imgs/authorize-off-icon"
+          "Image": "imgs/authorize-icon",
+          "Title": ""
         },
         {
-          "Image": "imgs/authorize-icon"
+          "Image": "imgs/authorize-off-icon",
+          "Title": ""
         }
       ]
     },
@@ -44,10 +46,12 @@
       "Controllers": ["Keypad"],
       "States": [
         {
-          "Image": "imgs/like-off-icon"
+          "Image": "imgs/like-on-icon",
+          "Title": ""
         },
         {
-          "Image": "imgs/like-on-icon"
+          "Image": "imgs/like-off-icon",
+          "Title": ""
         }
       ]
     },
@@ -59,10 +63,12 @@
       "Controllers": ["Keypad"],
       "States": [
         {
-          "Image": "imgs/playlist-off-icon"
+          "Image": "imgs/playlist-icon",
+          "Title": ""
         },
         {
-          "Image": "imgs/playlist-icon"
+          "Image": "imgs/playlist-off-icon",
+          "Title": ""
         }
       ],
       "PropertyInspectorPath": "ui/playlist-pi.html"
@@ -75,10 +81,12 @@
       "Controllers": ["Keypad"],
       "States": [
         {
-          "Image": "imgs/combo-off-icon"
+          "Image": "imgs/combo-icon",
+          "Title": ""
         },
         {
-          "Image": "imgs/combo-icon"
+          "Image": "imgs/combo-off-icon",
+          "Title": ""
         }
       ],
       "PropertyInspectorPath": "ui/playlist-pi.html"
