@@ -1,8 +1,10 @@
 import streamDeck, {
   action,
+  type KeyAction,
   type KeyDownEvent,
   SingletonAction,
   type WillAppearEvent,
+  type WillDisappearEvent,
   type DidReceiveSettingsEvent,
   type SendToPluginEvent,
 } from "@elgato/streamdeck";
@@ -24,14 +26,22 @@ type Settings = { playlistId?: string; playlistName?: string };
 @action({ UUID: "com.cognosis.spotify-controller.like-and-add" })
 export class LikeAndAddAction extends SingletonAction {
 
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private lastTrackUri: string | null = null;
+  private isDone = false; // true when both liked AND in playlist
+
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    const s = (ev.payload.settings ?? {}) as Settings;
-    await ev.action.setTitle(s.playlistName ? trunc(s.playlistName, 10) : "♥+List");
+    this.startPolling(ev);
+  }
+
+  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
+    this.stopPolling();
   }
 
   override async onDidReceiveSettings(ev: DidReceiveSettingsEvent): Promise<void> {
-    const s = (ev.payload.settings ?? {}) as Settings;
-    if (s.playlistName) await ev.action.setTitle(trunc(s.playlistName, 10));
+    this.lastTrackUri = null;
+    this.isDone = false;
+    await ev.action.setState(0);
   }
 
   override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, JsonObject>): Promise<void> {
@@ -54,8 +64,6 @@ export class LikeAndAddAction extends SingletonAction {
       return;
     }
 
-    const displayName = s.playlistName ? trunc(s.playlistName, 10) : "♥+List";
-
     try {
       const cur = await getCurrentTrack();
       if (!cur?.item) {
@@ -65,24 +73,23 @@ export class LikeAndAddAction extends SingletonAction {
         return;
       }
 
-      // Check current state: is it liked AND in the playlist?
-      const [savedArr, inPlaylist] = await Promise.all([
-        areItemsSaved([cur.item.uri]),
-        isTrackInPlaylist(s.playlistId, cur.item.uri),
-      ]);
-      const isLiked = savedArr[0];
+      const trackName = trunc(cur.item.name, 12);
 
-      if (isLiked && inPlaylist) {
-        // UNDO: unlike + remove from playlist
+      if (this.isDone) {
+        // State 1 (removal icon showing) — UNDO: unlike + remove from playlist
         logger.info(`Undo: ${cur.item.name} — unlike + remove from ${s.playlistName}`);
         const result = await unlikeAndRemoveFromPlaylist(cur.item.uri, s.playlistId);
 
         if (result.errors.length === 0) {
-          await ev.action.setTitle(`Undone!\n${cur.item.name.substring(0, 12)}`);
+          this.isDone = false;
+          await ev.action.setState(0);
+          await ev.action.setTitle(`Undone!\n${trackName}`);
           await ev.action.showOk();
           logger.info("Both unlike and remove succeeded");
         } else if (result.removedFromPlaylist) {
-          await ev.action.setTitle(`Removed\n(unlike err)`);
+          this.isDone = false;
+          await ev.action.setState(0);
+          await ev.action.setTitle(`Removed\n(like err)`);
           await ev.action.showOk();
         } else if (result.unliked) {
           await ev.action.setTitle(`Unliked\n(rm err)`);
@@ -93,15 +100,37 @@ export class LikeAndAddAction extends SingletonAction {
           logger.error(`Both failed: ${result.errors.join(", ")}`);
         }
       } else {
-        // DO: like + add to playlist
-        logger.info(`Like + Add: ${cur.item.name} (${cur.item.uri}) to ${s.playlistName} (${s.playlistId})`);
+        // State 0 (add icon showing) — check for duplicates first
+        const [savedArr, inPl] = await Promise.all([
+          areItemsSaved([cur.item.uri]),
+          isTrackInPlaylist(s.playlistId, cur.item.uri),
+        ]);
+        const isLiked = savedArr[0];
+
+        if (isLiked && inPl) {
+          // Already liked AND in playlist — show message, switch to removal state
+          this.isDone = true;
+          await ev.action.setState(1);
+          await ev.action.setTitle(`Already\nDone`);
+          await ev.action.showAlert();
+          logger.info(`Already liked and in playlist: ${cur.item.name}`);
+          setTimeout(async () => { try { await ev.action.setTitle(""); } catch {} }, 2500);
+          return;
+        }
+
+        // Do the action: like + add (skips parts already done)
+        logger.info(`Like + Add: ${cur.item.name} to ${s.playlistName}`);
         const result = await likeAndAddToPlaylist(cur.item.uri, s.playlistId);
 
         if (result.errors.length === 0) {
-          await ev.action.setTitle(`Done!\n${cur.item.name.substring(0, 12)}`);
+          this.isDone = true;
+          await ev.action.setState(1);
+          await ev.action.setTitle(`Done!\n${trackName}`);
           await ev.action.showOk();
           logger.info("Both like and add succeeded");
         } else if (result.addedToPlaylist) {
+          this.isDone = true;
+          await ev.action.setState(1);
           await ev.action.setTitle(`Added!\n(like err)`);
           await ev.action.showOk();
         } else if (result.liked) {
@@ -114,17 +143,52 @@ export class LikeAndAddAction extends SingletonAction {
         }
       }
 
-      setTimeout(async () => {
-        try { await ev.action.setTitle(displayName); } catch {}
-      }, 2500);
+      setTimeout(async () => { try { await ev.action.setTitle(""); } catch {} }, 2500);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error(`Error: ${msg}`);
       await ev.action.setTitle("Error");
       await ev.action.showAlert();
-      setTimeout(async () => {
-        try { await ev.action.setTitle(displayName); } catch {}
-      }, 2500);
+      setTimeout(async () => { try { await ev.action.setTitle(""); } catch {} }, 2500);
+    }
+  }
+
+  private startPolling(ev: WillAppearEvent): void {
+    this.stopPolling();
+    const keyAction = ev.action as KeyAction;
+    const poll = async () => {
+      if (!spotifyAuth.isAuthorized) return;
+      try {
+        const s = (await keyAction.getSettings()) as Settings;
+        if (!s.playlistId) return;
+
+        const cur = await getCurrentTrack();
+        if (!cur?.item) return;
+
+        // When track changes, check if it's liked AND in the playlist
+        if (cur.item.uri !== this.lastTrackUri) {
+          this.lastTrackUri = cur.item.uri;
+          const [savedArr, inPl] = await Promise.all([
+            areItemsSaved([cur.item.uri]),
+            isTrackInPlaylist(s.playlistId, cur.item.uri),
+          ]);
+          const bothDone = savedArr[0] && inPl;
+          this.isDone = bothDone;
+          await keyAction.setState(bothDone ? 1 : 0);
+          await keyAction.setTitle("");
+        }
+      } catch (err) {
+        logger.debug(`Poll error: ${err instanceof Error ? err.message : err}`);
+      }
+    };
+    poll();
+    this.pollTimer = setInterval(poll, 10_000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
     }
   }
 }

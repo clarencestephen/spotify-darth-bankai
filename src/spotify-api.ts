@@ -184,9 +184,9 @@ export async function removeItemsFromPlaylist(playlistId: string, uris: string[]
   logger.info(`Removed from playlist ${playlistId}: ${uris.join(", ")}`);
 }
 
-/** Check if a track URI exists in a playlist (searches first 200 items) */
+/** Check if a track URI exists in a playlist (searches up to 500 items) */
 export async function isTrackInPlaylist(playlistId: string, trackUri: string): Promise<boolean> {
-  for (let offset = 0; offset < 200; offset += 50) {
+  for (let offset = 0; offset < 500; offset += 50) {
     const resp = await apiFetch(`/playlists/${playlistId}/items?limit=50&offset=${offset}&fields=items(track(uri)),next`);
     if (!resp.ok) {
       logger.warn(`Failed to check playlist contents: ${resp.status}`);

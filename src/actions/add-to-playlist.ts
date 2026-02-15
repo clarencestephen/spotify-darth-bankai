@@ -1,8 +1,10 @@
 import streamDeck, {
   action,
+  type KeyAction,
   type KeyDownEvent,
   SingletonAction,
   type WillAppearEvent,
+  type WillDisappearEvent,
   type DidReceiveSettingsEvent,
   type SendToPluginEvent,
 } from "@elgato/streamdeck";
@@ -18,14 +20,23 @@ type Settings = { playlistId?: string; playlistName?: string };
 @action({ UUID: "com.cognosis.spotify-controller.add-to-playlist" })
 export class AddToPlaylistAction extends SingletonAction {
 
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private lastTrackUri: string | null = null;
+  private inPlaylist = false;
+
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {
-    const s = (ev.payload.settings ?? {}) as Settings;
-    await ev.action.setTitle(s.playlistName ? trunc(s.playlistName, 10) : "+ List");
+    this.startPolling(ev);
+  }
+
+  override async onWillDisappear(_ev: WillDisappearEvent): Promise<void> {
+    this.stopPolling();
   }
 
   override async onDidReceiveSettings(ev: DidReceiveSettingsEvent): Promise<void> {
-    const s = (ev.payload.settings ?? {}) as Settings;
-    if (s.playlistName) await ev.action.setTitle(trunc(s.playlistName, 10));
+    // Reset state when settings change (new playlist selected)
+    this.lastTrackUri = null;
+    this.inPlaylist = false;
+    await ev.action.setState(0);
   }
 
   override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, JsonObject>): Promise<void> {
@@ -46,36 +57,84 @@ export class AddToPlaylistAction extends SingletonAction {
       return;
     }
 
-    const displayName = trunc(s.playlistName || "+ List", 10);
-
     try {
       const cur = await getCurrentTrack();
       if (!cur?.item) { await ev.action.setTitle("No\nTrack"); await ev.action.showAlert(); return; }
 
-      // Toggle: check if track is already in the playlist
-      const inPlaylist = await isTrackInPlaylist(s.playlistId, cur.item.uri);
+      const trackName = trunc(cur.item.name, 12);
 
-      if (inPlaylist) {
-        // Remove from playlist
+      if (this.inPlaylist) {
+        // State 1 (removal icon showing) — REMOVE from playlist
         await removeItemsFromPlaylist(s.playlistId, [cur.item.uri]);
-        await ev.action.setTitle(`Removed\n${trunc(cur.item.name, 12)}`);
+        this.inPlaylist = false;
+        await ev.action.setState(0);
+        await ev.action.setTitle(`Removed\n${trackName}`);
         await ev.action.showOk();
         logger.info(`Removed from playlist: ${cur.item.name}`);
       } else {
-        // Add to playlist
+        // State 0 (add icon showing) — check for duplicates first, then ADD
+        const alreadyIn = await isTrackInPlaylist(s.playlistId, cur.item.uri);
+        if (alreadyIn) {
+          // Song already on playlist — show message, switch to removal state
+          this.inPlaylist = true;
+          await ev.action.setState(1);
+          await ev.action.setTitle(`Already\nOn List`);
+          await ev.action.showAlert();
+          logger.info(`Already in playlist: ${cur.item.name}`);
+          setTimeout(async () => { try { await ev.action.setTitle(""); } catch {} }, 2500);
+          return;
+        }
+
         await addItemsToPlaylist(s.playlistId, [cur.item.uri]);
-        await ev.action.setTitle(`Added!\n${trunc(cur.item.name, 12)}`);
+        this.inPlaylist = true;
+        await ev.action.setState(1);
+        await ev.action.setTitle(`Added!\n${trackName}`);
         await ev.action.showOk();
         logger.info(`Added to playlist: ${cur.item.name}`);
       }
 
-      setTimeout(async () => { try { await ev.action.setTitle(displayName); } catch {} }, 2500);
+      setTimeout(async () => { try { await ev.action.setTitle(""); } catch {} }, 2500);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error(`Error: ${msg}`);
       await ev.action.setTitle("Error");
       await ev.action.showAlert();
-      setTimeout(async () => { try { await ev.action.setTitle(displayName); } catch {} }, 2500);
+      setTimeout(async () => { try { await ev.action.setTitle(""); } catch {} }, 2500);
+    }
+  }
+
+  private startPolling(ev: WillAppearEvent): void {
+    this.stopPolling();
+    const keyAction = ev.action as KeyAction;
+    const poll = async () => {
+      if (!spotifyAuth.isAuthorized) return;
+      try {
+        const s = (await keyAction.getSettings()) as Settings;
+        if (!s.playlistId) return;
+
+        const cur = await getCurrentTrack();
+        if (!cur?.item) return;
+
+        // When track changes, check if it's in the playlist
+        if (cur.item.uri !== this.lastTrackUri) {
+          this.lastTrackUri = cur.item.uri;
+          const inPl = await isTrackInPlaylist(s.playlistId, cur.item.uri);
+          this.inPlaylist = inPl;
+          await keyAction.setState(inPl ? 1 : 0);
+          await keyAction.setTitle("");
+        }
+      } catch (err) {
+        logger.debug(`Poll error: ${err instanceof Error ? err.message : err}`);
+      }
+    };
+    poll();
+    this.pollTimer = setInterval(poll, 10_000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
     }
   }
 }
