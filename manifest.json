@@ -1,12 +1,12 @@
 {
-  "Name": "Spotify [DarthBankai]",
+  "Name": "Spotify [Darth_Bankai]",
   "Version": "1.0.0",
   "Author": "Cognosis LLC",
   "Description": "Like/unlike tracks & add current song to playlists on Spotify",
   "Icon": "imgs/plugin-icon",
-  "URL": "https://github.com/cognosis",
-  "Category": "Spotify [DarthBankai]",
-  "CategoryIcon": "imgs/plugin-icon",
+  "URL": "https://github.com/clarencestephen",
+  "Category": "Spotify [Darth_Bankai]",
+  "CategoryIcon": "imgs/category-icon",
   "CodePath": "bin/plugin.js",
   "OS": [
     { "Platform": "mac", "MinimumVersion": "10.15" },
@@ -29,10 +29,16 @@
       "Controllers": ["Keypad"],
       "States": [
         {
-          "Image": "imgs/authorize-icon",
+          "Image": "imgs/authorize-off-icon",
           "TitleAlignment": "bottom",
           "FontSize": "9",
           "Title": "Connect"
+        },
+        {
+          "Image": "imgs/authorize-icon",
+          "TitleAlignment": "bottom",
+          "FontSize": "9",
+          "Title": "Connected"
         }
       ]
     },
@@ -61,9 +67,15 @@
       "Name": "Add to Playlist",
       "UUID": "com.cognosis.spotify-controller.add-to-playlist",
       "Icon": "imgs/playlist-icon",
-      "Tooltip": "Add the currently playing track to a chosen playlist",
+      "Tooltip": "Add or remove the currently playing track from a chosen playlist",
       "Controllers": ["Keypad"],
       "States": [
+        {
+          "Image": "imgs/playlist-off-icon",
+          "TitleAlignment": "bottom",
+          "FontSize": "9",
+          "Title": ""
+        },
         {
           "Image": "imgs/playlist-icon",
           "TitleAlignment": "bottom",
@@ -80,6 +92,12 @@
       "Tooltip": "Like the current track AND add it to a playlist in one press",
       "Controllers": ["Keypad"],
       "States": [
+        {
+          "Image": "imgs/combo-off-icon",
+          "TitleAlignment": "bottom",
+          "FontSize": "8",
+          "Title": ""
+        },
         {
           "Image": "imgs/combo-icon",
           "TitleAlignment": "bottom",
