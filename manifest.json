@@ -29,16 +29,10 @@
       "Controllers": ["Keypad"],
       "States": [
         {
-          "Image": "imgs/authorize-off-icon",
-          "TitleAlignment": "bottom",
-          "FontSize": "9",
-          "Title": "Connect"
+          "Image": "imgs/authorize-off-icon"
         },
         {
-          "Image": "imgs/authorize-icon",
-          "TitleAlignment": "bottom",
-          "FontSize": "9",
-          "Title": "Connected"
+          "Image": "imgs/authorize-icon"
         }
       ]
     },
@@ -50,16 +44,10 @@
       "Controllers": ["Keypad"],
       "States": [
         {
-          "Image": "imgs/like-off-icon",
-          "TitleAlignment": "bottom",
-          "FontSize": "9",
-          "Title": ""
+          "Image": "imgs/like-off-icon"
         },
         {
-          "Image": "imgs/like-on-icon",
-          "TitleAlignment": "bottom",
-          "FontSize": "9",
-          "Title": ""
+          "Image": "imgs/like-on-icon"
         }
       ]
     },
@@ -71,16 +59,10 @@
       "Controllers": ["Keypad"],
       "States": [
         {
-          "Image": "imgs/playlist-off-icon",
-          "TitleAlignment": "bottom",
-          "FontSize": "9",
-          "Title": ""
+          "Image": "imgs/playlist-off-icon"
         },
         {
-          "Image": "imgs/playlist-icon",
-          "TitleAlignment": "bottom",
-          "FontSize": "9",
-          "Title": ""
+          "Image": "imgs/playlist-icon"
         }
       ],
       "PropertyInspectorPath": "ui/playlist-pi.html"
@@ -93,16 +75,10 @@
       "Controllers": ["Keypad"],
       "States": [
         {
-          "Image": "imgs/combo-off-icon",
-          "TitleAlignment": "bottom",
-          "FontSize": "8",
-          "Title": ""
+          "Image": "imgs/combo-off-icon"
         },
         {
-          "Image": "imgs/combo-icon",
-          "TitleAlignment": "bottom",
-          "FontSize": "8",
-          "Title": ""
+          "Image": "imgs/combo-icon"
         }
       ],
       "PropertyInspectorPath": "ui/playlist-pi.html"
