@@ -16,6 +16,7 @@ import {
   isTrackInPlaylist,
   likeAndAddToPlaylist,
   unlikeAndRemoveFromPlaylist,
+  isRateLimited,
 } from "../spotify-api";
 import { handlePlaylistPI } from "./playlist-pi-handler";
 
@@ -157,7 +158,7 @@ export class LikeAndAddAction extends SingletonAction {
     this.stopPolling();
     const keyAction = ev.action as KeyAction;
     const poll = async () => {
-      if (!spotifyAuth.isAuthorized) return;
+      if (!spotifyAuth.isAuthorized || isRateLimited()) return;
       try {
         const s = (await keyAction.getSettings()) as Settings;
         if (!s.playlistId) return;
@@ -168,21 +169,23 @@ export class LikeAndAddAction extends SingletonAction {
         // When track changes, check if it's liked AND in the playlist
         if (cur.item.uri !== this.lastTrackUri) {
           this.lastTrackUri = cur.item.uri;
-          const [savedArr, inPl] = await Promise.all([
-            areItemsSaved([cur.item.uri]),
-            isTrackInPlaylist(s.playlistId, cur.item.uri),
-          ]);
-          const bothDone = savedArr[0] && inPl;
-          this.isDone = bothDone;
-          await keyAction.setState(bothDone ? 1 : 0);
-          await keyAction.setTitle("");
+          if (!isRateLimited()) {
+            const [savedArr, inPl] = await Promise.all([
+              areItemsSaved([cur.item.uri]),
+              isTrackInPlaylist(s.playlistId, cur.item.uri),
+            ]);
+            const bothDone = savedArr[0] && inPl;
+            this.isDone = bothDone;
+            await keyAction.setState(bothDone ? 1 : 0);
+            await keyAction.setTitle("");
+          }
         }
       } catch (err) {
         logger.debug(`Poll error: ${err instanceof Error ? err.message : err}`);
       }
     };
     poll();
-    this.pollTimer = setInterval(poll, 10_000);
+    this.pollTimer = setInterval(poll, 15_000);
   }
 
   private stopPolling(): void {

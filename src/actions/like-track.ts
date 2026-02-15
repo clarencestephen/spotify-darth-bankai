@@ -1,6 +1,6 @@
 import streamDeck, { action, type KeyAction, type KeyDownEvent, SingletonAction, type WillAppearEvent } from "@elgato/streamdeck";
 import { spotifyAuth } from "../spotify-auth";
-import { getCurrentTrack, areItemsSaved, saveToLibrary, removeFromLibrary } from "../spotify-api";
+import { getCurrentTrack, areItemsSaved, saveToLibrary, removeFromLibrary, isRateLimited } from "../spotify-api";
 
 const logger = streamDeck.logger.createScope("LikeTrack");
 
@@ -68,24 +68,26 @@ export class LikeTrackAction extends SingletonAction {
     this.stopPolling();
     const keyAction = ev.action as KeyAction;
     const poll = async () => {
-      if (!spotifyAuth.isAuthorized) return;
+      if (!spotifyAuth.isAuthorized || isRateLimited()) return;
       try {
         const cur = await getCurrentTrack();
         if (!cur?.item) return;
 
         if (cur.item.uri !== this.lastTrackUri) {
           this.lastTrackUri = cur.item.uri;
-          const [saved] = await areItemsSaved([cur.item.uri]);
-          this.isLiked = saved;
-          await keyAction.setState(saved ? 1 : 0);
-          await keyAction.setTitle(saved ? "Liked" : "Like");
+          if (!isRateLimited()) {
+            const [saved] = await areItemsSaved([cur.item.uri]);
+            this.isLiked = saved;
+            await keyAction.setState(saved ? 1 : 0);
+            await keyAction.setTitle(saved ? "Liked" : "Like");
+          }
         }
       } catch (err) {
         logger.debug(`Poll error: ${err instanceof Error ? err.message : err}`);
       }
     };
     poll();
-    this.pollTimer = setInterval(poll, 10_000);
+    this.pollTimer = setInterval(poll, 15_000);
   }
 
   private stopPolling(): void {

@@ -4,7 +4,30 @@ import { spotifyAuth } from "./spotify-auth";
 const logger = streamDeck.logger.createScope("SpotifyAPI");
 const BASE = "https://api.spotify.com/v1";
 
+// Global rate-limit backoff: when we get a long rate limit, stop ALL non-essential calls
+let rateLimitedUntil = 0; // timestamp when rate limit expires
+
+/** Check if we're currently in a global rate-limit backoff */
+export function isRateLimited(): boolean {
+  return Date.now() < rateLimitedUntil;
+}
+
+/** Get human-readable time until rate limit expires */
+export function rateLimitExpiresIn(): string {
+  const remaining = rateLimitedUntil - Date.now();
+  if (remaining <= 0) return "";
+  const hours = Math.floor(remaining / 3_600_000);
+  const mins = Math.floor((remaining % 3_600_000) / 60_000);
+  return hours > 0 ? `${hours}h${mins}m` : `${mins}m`;
+}
+
 async function apiFetch(endpoint: string, init?: { method?: string; body?: string }): Promise<Response> {
+  // If globally rate limited, reject immediately (except currently-playing which still works)
+  if (isRateLimited() && !endpoint.includes("/me/player/currently-playing")) {
+    logger.debug(`Skipping ${endpoint} — rate limited for ${rateLimitExpiresIn()}`);
+    return new Response(null, { status: 429, statusText: "Rate limited" });
+  }
+
   const token = await spotifyAuth.getAccessToken();
   const method = init?.method ?? "GET";
 
@@ -22,14 +45,22 @@ async function apiFetch(endpoint: string, init?: { method?: string; body?: strin
     if (resp.status === 429) {
       const retryAfter = parseInt(resp.headers.get("Retry-After") ?? "10", 10);
       if (retryAfter > 30) {
+        // Long rate limit — set global backoff so ALL endpoints stop
+        rateLimitedUntil = Date.now() + retryAfter * 1000;
         const hours = (retryAfter / 3600).toFixed(1);
-        logger.error(`Rate limited on ${endpoint} for ${hours}h (Retry-After=${retryAfter}s), failing immediately`);
+        logger.error(`Rate limited for ${hours}h — all non-essential API calls paused until ${new Date(rateLimitedUntil).toLocaleTimeString()}`);
         return resp;
       }
       const waitSecs = Math.max(retryAfter, 5);
       logger.warn(`Rate limited on ${endpoint}, Retry-After=${retryAfter}s, waiting ${waitSecs}s...`);
       await new Promise((r) => setTimeout(r, waitSecs * 1000));
       continue;
+    }
+
+    // If we get a success after being rate limited, clear the backoff
+    if (resp.ok && rateLimitedUntil > 0) {
+      rateLimitedUntil = 0;
+      logger.info("Rate limit cleared — API calls resumed");
     }
 
     if (!resp.ok) {

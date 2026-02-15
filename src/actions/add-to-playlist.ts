@@ -10,7 +10,7 @@ import streamDeck, {
 } from "@elgato/streamdeck";
 import type { JsonObject, JsonValue } from "@elgato/utils";
 import { spotifyAuth } from "../spotify-auth";
-import { getCurrentTrack, addItemsToPlaylist, removeItemsFromPlaylist, isTrackInPlaylist } from "../spotify-api";
+import { getCurrentTrack, addItemsToPlaylist, removeItemsFromPlaylist, isTrackInPlaylist, isRateLimited } from "../spotify-api";
 import { handlePlaylistPI } from "./playlist-pi-handler";
 
 const logger = streamDeck.logger.createScope("AddToPlaylist");
@@ -107,7 +107,7 @@ export class AddToPlaylistAction extends SingletonAction {
     this.stopPolling();
     const keyAction = ev.action as KeyAction;
     const poll = async () => {
-      if (!spotifyAuth.isAuthorized) return;
+      if (!spotifyAuth.isAuthorized || isRateLimited()) return;
       try {
         const s = (await keyAction.getSettings()) as Settings;
         if (!s.playlistId) return;
@@ -118,17 +118,19 @@ export class AddToPlaylistAction extends SingletonAction {
         // When track changes, check if it's in the playlist
         if (cur.item.uri !== this.lastTrackUri) {
           this.lastTrackUri = cur.item.uri;
-          const inPl = await isTrackInPlaylist(s.playlistId, cur.item.uri);
-          this.inPlaylist = inPl;
-          await keyAction.setState(inPl ? 1 : 0);
-          await keyAction.setTitle("");
+          if (!isRateLimited()) {
+            const inPl = await isTrackInPlaylist(s.playlistId, cur.item.uri);
+            this.inPlaylist = inPl;
+            await keyAction.setState(inPl ? 1 : 0);
+            await keyAction.setTitle("");
+          }
         }
       } catch (err) {
         logger.debug(`Poll error: ${err instanceof Error ? err.message : err}`);
       }
     };
     poll();
-    this.pollTimer = setInterval(poll, 10_000);
+    this.pollTimer = setInterval(poll, 15_000);
   }
 
   private stopPolling(): void {
