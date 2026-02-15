@@ -175,6 +175,32 @@ export async function addItemsToPlaylist(playlistId: string, uris: string[]): Pr
   logger.info(`Added to playlist ${playlistId}: ${uris.join(", ")}`);
 }
 
+export async function removeItemsFromPlaylist(playlistId: string, uris: string[]): Promise<void> {
+  const resp = await apiFetch(`/playlists/${playlistId}/items`, {
+    method: "DELETE",
+    body: JSON.stringify({ tracks: uris.map((uri) => ({ uri })) }),
+  });
+  if (!resp.ok) throw new Error(`Remove from playlist: ${resp.status}`);
+  logger.info(`Removed from playlist ${playlistId}: ${uris.join(", ")}`);
+}
+
+/** Check if a track URI exists in a playlist (searches first 200 items) */
+export async function isTrackInPlaylist(playlistId: string, trackUri: string): Promise<boolean> {
+  for (let offset = 0; offset < 200; offset += 50) {
+    const resp = await apiFetch(`/playlists/${playlistId}/items?limit=50&offset=${offset}&fields=items(track(uri)),next`);
+    if (!resp.ok) {
+      logger.warn(`Failed to check playlist contents: ${resp.status}`);
+      return false;
+    }
+    const data = (await resp.json()) as { items: { track: { uri: string } }[]; next: string | null };
+    for (const item of (data.items ?? [])) {
+      if (item?.track?.uri === trackUri) return true;
+    }
+    if (!data.next) break;
+  }
+  return false;
+}
+
 export async function likeAndAddToPlaylist(
   trackUri: string, playlistId: string
 ): Promise<{ liked: boolean; addedToPlaylist: boolean; errors: string[] }> {
@@ -198,6 +224,33 @@ export async function likeAndAddToPlaylist(
   return {
     liked: likeResult.status === "fulfilled",
     addedToPlaylist: playlistResult.status === "fulfilled",
+    errors,
+  };
+}
+
+export async function unlikeAndRemoveFromPlaylist(
+  trackUri: string, playlistId: string
+): Promise<{ unliked: boolean; removedFromPlaylist: boolean; errors: string[] }> {
+  const errors: string[] = [];
+  const [unlikeResult, removeResult] = await Promise.allSettled([
+    removeFromLibrary([trackUri]),
+    removeItemsFromPlaylist(playlistId, [trackUri]),
+  ]);
+
+  if (unlikeResult.status === "rejected") {
+    const msg = unlikeResult.reason instanceof Error ? unlikeResult.reason.message : String(unlikeResult.reason);
+    logger.error(`Unlike failed: ${msg}`);
+    errors.push(`Unlike: ${msg}`);
+  }
+  if (removeResult.status === "rejected") {
+    const msg = removeResult.reason instanceof Error ? removeResult.reason.message : String(removeResult.reason);
+    logger.error(`Remove from playlist failed: ${msg}`);
+    errors.push(`Playlist: ${msg}`);
+  }
+
+  return {
+    unliked: unlikeResult.status === "fulfilled",
+    removedFromPlaylist: removeResult.status === "fulfilled",
     errors,
   };
 }

@@ -93,23 +93,7 @@ This is the most important step. The plugin needs your Client ID and Client Secr
    SPOTIFY_CLIENT_SECRET=f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3
    ```
 
-5. **(Optional) Set up the "Like + Add" combo button.** If you want to use the combo button that likes a song AND adds it to a playlist in one press, you also need to add your playlist ID:
-
-   **How to find your playlist ID:**
-   1. Open Spotify (desktop app or web)
-   2. Right-click the playlist you want to use
-   3. Click **Share** > **Copy link to playlist**
-   4. You'll get a URL like: `https://open.spotify.com/playlist/0HGqu9QX72YoNhhVlj8TQH`
-   5. The part after `/playlist/` is your playlist ID — in this example: `0HGqu9QX72YoNhhVlj8TQH`
-
-   Add these two lines to your `.env` file:
-   ```
-   SPOTIFY_PLAYLIST_ID=0HGqu9QX72YoNhhVlj8TQH
-   SPOTIFY_PLAYLIST_NAME=My Favs
-   ```
-   Replace the ID with your own, and the name with whatever you want the button to display.
-
-6. **Save the file**
+5. **Save the file**
 
 > **Your `.env` file is git-ignored** — it will never be uploaded or shared, even if you push changes. Your secrets stay on your machine only.
 
@@ -162,7 +146,8 @@ You only need to do this once. Tokens refresh automatically.
 
 ### Like + Add to Playlist (Combo)
 - Drag **"Like + Add to Playlist"** onto your deck
-- One press: likes the track AND adds it to a playlist in parallel
+- In the Stream Deck editor, click the button to open the **Property Inspector** and select your target playlist (same dropdown as "Add to Playlist")
+- One press: likes the track AND adds it to that playlist in parallel
 - Shows "Done!" on success with the track name
 
 ---

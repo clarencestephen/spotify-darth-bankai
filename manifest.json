@@ -1,11 +1,11 @@
 {
-  "Name": "Spotify Controller",
+  "Name": "Spotify [DarthBankai]",
   "Version": "1.0.0",
   "Author": "Cognosis LLC",
   "Description": "Like/unlike tracks & add current song to playlists on Spotify",
   "Icon": "imgs/plugin-icon",
   "URL": "https://github.com/cognosis",
-  "Category": "Spotify Controller",
+  "Category": "Spotify [DarthBankai]",
   "CategoryIcon": "imgs/plugin-icon",
   "CodePath": "bin/plugin.js",
   "OS": [
@@ -86,7 +86,8 @@
           "FontSize": "8",
           "Title": ""
         }
-      ]
+      ],
+      "PropertyInspectorPath": "ui/playlist-pi.html"
     }
   ]
 }
