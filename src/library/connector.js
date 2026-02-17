@@ -13,7 +13,10 @@ import {
 	v4
 } from 'uuid'
 
-const proxyAgent = true ? new ProxyAgent({
+// Set to true to enable proxy debugging (requires proxy running on 127.0.0.1:8000)
+const ENABLE_PROXY_DEBUG = false
+
+const proxyAgent = ENABLE_PROXY_DEBUG ? new ProxyAgent({
 	uri: 'http://127.0.0.1:8000',
 
 	requestTls: {
@@ -67,27 +70,36 @@ class Connector extends EventEmitter {
 		if (!this.#setup)
 			throw new Error(`The Spotify API call "${path}" failed because the connector is not set up.`)
 
+		// Add Content-Type header for JSON body requests
+		const headers = {
+			...options.headers,
+			'Authorization': `Bearer ${this.#accessToken}`
+		}
+
+		if (options.body && typeof options.body === 'string')
+			headers['Content-Type'] = 'application/json'
+
 		let response = await fetch(`https://api.spotify.com/v1/${path}`, {
 			...options,
 			dispatcher: proxyAgent,
-
-			headers: {
-				...options.headers,
-				'Authorization': `Bearer ${this.#accessToken}`
-			}
+			headers
 		})
 
 		if (response.status === 401) {
 			await this.#refreshAccessToken()
 
+			const retryHeaders = {
+				...options.headers,
+				'Authorization': `Bearer ${this.#accessToken}`
+			}
+
+			if (options.body && typeof options.body === 'string')
+				retryHeaders['Content-Type'] = 'application/json'
+
 			response = await fetch(`https://api.spotify.com/v1/${path}`, {
 				...options,
 				dispatcher: proxyAgent,
-
-				headers: {
-					...options.headers,
-					'Authorization': `Bearer ${this.#accessToken}`
-				}
+				headers: retryHeaders
 			})
 		}
 
@@ -95,6 +107,8 @@ class Connector extends EventEmitter {
 			return constants.API_EMPTY_RESPONSE
 		else if (response.status === 404 && allowResponses.includes(constants.API_NOT_FOUND_RESPONSE))
 			return constants.API_NOT_FOUND_RESPONSE
+		else if (response.status === 201 && allowResponses.includes(constants.API_CREATED_RESPONSE))
+			return constants.API_CREATED_RESPONSE
 
 		if (response.status !== 200)
 			throw new constants.ApiError(response.status, `The Spotify API call "${path}" with body ${JSON.stringify(options.body ?? {})} failed with status "${response.status}" and body "${await response.text()}".`)

@@ -801,7 +801,7 @@ class Wrapper extends EventEmitter {
 		return this.#wrapCall(async () => {
 			await connector.callSpotifyApi(`me/library?uris=${encodeURIComponent(song.item.uri)}`, {
 				method: 'PUT'
-			})
+			}, [constants.API_EMPTY_RESPONSE])
 
 			this.#setSong({
 				item: song.item,
@@ -842,7 +842,7 @@ class Wrapper extends EventEmitter {
 		return this.#wrapCall(async () => {
 			await connector.callSpotifyApi(`me/library?uris=${encodeURIComponent(song.item.uri)}`, {
 				method: 'DELETE'
-			})
+			}, [constants.API_EMPTY_RESPONSE])
 
 			this.#setSong({
 				item: song.item,
@@ -868,7 +868,7 @@ class Wrapper extends EventEmitter {
 			if (playlistId === 'tracks')
 				await connector.callSpotifyApi(`me/library?uris=${encodeURIComponent(trackUri)}`, {
 					method: 'PUT'
-				})
+				}, [constants.API_EMPTY_RESPONSE])
 			else {
 				await connector.callSpotifyApi(`playlists/${playlistId}/tracks`, {
 					method: 'POST',
@@ -876,7 +876,7 @@ class Wrapper extends EventEmitter {
 					body: JSON.stringify({
 						uris: [trackUri]
 					})
-				})
+				}, [constants.API_CREATED_RESPONSE])
 			}
 
 			return constants.WRAPPER_RESPONSE_SUCCESS
