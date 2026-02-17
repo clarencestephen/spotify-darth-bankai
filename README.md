@@ -1,6 +1,9 @@
 ![category@2x](https://github.com/user-attachments/assets/533c520e-a7b0-4ea3-810d-de47260025c8)
 
-# Essentials for Spotify
+# Essentials for Spotify — Darth Bankai Fork
+
+> **Forked from [ntanis-dev/essentials-for-spotify](https://github.com/ntanis-dev/essentials-for-spotify)**
+> Original plugin by [ntanis-dev](https://github.com/ntanis-dev) — all credit for the core plugin goes to them.
 
 Effortlessly control your [Spotify](https://www.spotify.com/) through your [Elgato Stream Deck](https://www.elgato.com/us/en/s/welcome-to-stream-deck).\
 A **[Spotify Premium](https://www.spotify.com/premium/)** account is required to use the full functionality of this plugin.
