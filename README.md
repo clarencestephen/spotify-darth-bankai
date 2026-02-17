@@ -171,13 +171,33 @@ So the **Like / Unlike** button will show a questionmark "?" to indicate that.
 
 ## Installation
 
-To install and use the plugin, follow these steps:
+### Prerequisites
 
-1. Download the latest `.streamDeckPlugin` release from [here](https://github.com/ntanis-dev/essentials-for-spotify/releases).
-3. Double-click and install it.
-4. Place the **Setup** button in your StreamDeck and press it.
-5. A web page should open on your default internet browser, follow the instructions there.
-6. Enjoy!
+- [Node.js](https://nodejs.org/) version 20 or later
+- [Elgato Stream Deck](https://www.elgato.com/us/en/s/welcome-to-stream-deck) software (v6.4+)
+- [Spotify Premium](https://www.spotify.com/premium/) account
+
+### Quick Install
+
+1. Download or clone this repo:
+   ```
+   git clone https://github.com/clarencestephen/spotify-darth-bankai.git
+   cd spotify-darth-bankai
+   ```
+2. Run the installer for your platform:
+
+   **Windows** — double-click `install.bat` or run it from a terminal:
+   ```
+   install.bat
+   ```
+
+   **macOS** — open a terminal in the folder and run:
+   ```
+   ./install.sh
+   ```
+3. Restart the Stream Deck app.
+4. Drag the **Setup** button onto your deck and press it to connect your Spotify account.
+5. Enjoy!
 
 ## Notes
 
