@@ -18,6 +18,10 @@ A **[Spotify Premium](https://www.spotify.com/premium/)** account is required to
 - **Marquee Titles**: Long titles scroll smoothly on both buttons and dials so you never miss a thing.
 - **Clear Visual Status**: Contextual icons and animations for loading states, errors, and warnings at a glance.
 
+### Known Issues
+
+- **Add to Playlist**: Removing a song from a playlist may sometimes add duplicate entries instead.
+
 ### Layouts
 
   Perfect layouts for **Stream Deck Neo**, **Stream Deck MK.2** and **Stream Deck +**.
