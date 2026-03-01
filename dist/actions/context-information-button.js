@@ -1,0 +1,159 @@
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+import os from 'os';
+import { action } from '@elgato/streamdeck';
+import { Button } from './button.js';
+import { spawn } from 'child_process';
+import constants from '../library/constants.js';
+import images from '../library/images.js';
+import wrapper from '../library/wrapper.js';
+let ContextInformationButton = class ContextInformationButton extends Button {
+    static STATABLE = true;
+    constructor() {
+        super();
+        this.setStatelessImage('images/states/context-information-unknown');
+        wrapper.on('playbackContextChanged', this.#onPlaybackContextChanged.bind(this));
+        wrapper.on('songChanged', this.#onSongChanged.bind(this));
+    }
+    async #onSongChanged(song, pending = false) {
+        for (const context of this.contexts)
+            if (this.settings[context]?.image_source === 'album' && wrapper.playbackContext)
+                await this.#updateImage(context, wrapper.playbackContext, song, pending);
+    }
+    async #updateImage(context, playbackContext, song, pending) {
+        const imageSource = this.settings[context]?.image_source || 'context';
+        if (imageSource === 'album' && song?.item?.album) {
+            if (!images.isSongCached(song))
+                await this.setImage(context, 'images/states/pending');
+            const image = await images.getForSong(song);
+            if (image)
+                await this.setImage(context, `data:image/jpeg;base64,${image}`);
+            else if (song.item.uri.includes('local:'))
+                await this.setImage(context, 'images/states/local');
+            else
+                await this.setImage(context);
+        }
+        else if (playbackContext) {
+            if (!images.isItemCached(playbackContext))
+                await this.setImage(context, 'images/states/pending');
+            const image = await images.getForItem(playbackContext);
+            if (image)
+                await this.setImage(context, `data:image/jpeg;base64,${image}`);
+            else if (playbackContext.type === 'local')
+                await this.setImage(context, 'images/states/local');
+            else
+                await this.setImage(context);
+        }
+        else if (pending)
+            await this.setImage(context, 'images/states/pending');
+        else
+            await this.setImage(context, 'images/states/context-information-unknown');
+    }
+    async #onPlaybackContextChanged(playbackContext, pending = false, contexts = this.contexts, force = false) {
+        const promises = [];
+        for (const context of contexts)
+            promises.push(new Promise(async (resolve) => {
+                this.setUnpressable(context, true);
+                if ((playbackContext && this.marquees[context] && this.marquees[context].id !== playbackContext.uri) || ((!playbackContext) && this.marquees[context]) || force) {
+                    this.clearMarquee(context);
+                    await this.setTitle(context, '');
+                }
+                if (playbackContext) {
+                    if ((!this.marquees[context]) || this.marquees[context].id !== playbackContext.uri || force)
+                        await this.marqueeTitle(playbackContext.uri, [
+                            this.settings[context].show.includes('title') ? {
+                                key: 'title',
+                                value: playbackContext.title
+                            } : undefined,
+                            playbackContext.subtitle && this.settings[context].show.includes('subtitle') ? {
+                                key: 'subtitle',
+                                value: playbackContext.subtitle
+                            } : undefined,
+                            playbackContext.extra && this.settings[context].show.includes('extra') ? {
+                                key: 'extra',
+                                value: playbackContext.extra
+                            } : undefined
+                        ].filter(v => !!v), context);
+                    else
+                        this.resumeMarquee(context);
+                    await this.#updateImage(context, playbackContext, wrapper.song, pending);
+                }
+                else if (pending)
+                    await this.setImage(context, 'images/states/pending');
+                else
+                    await this.setImage(context, 'images/states/context-information-unknown');
+                if (!pending)
+                    this.setUnpressable(context, false);
+                resolve(true);
+            }));
+        await Promise.allSettled(promises);
+    }
+    async invokeWrapperAction(context, type) {
+        if (type === Button.TYPES.RELEASED)
+            return;
+        if (this.settings[context].action === 'play_pause')
+            return wrapper.togglePlayback();
+        else if (this.settings[context].action === 'open_spotify')
+            if (wrapper.playbackContext) {
+                switch (os.platform()) {
+                    case 'darwin':
+                        spawn('open', [wrapper.playbackContext.uri]);
+                        break;
+                    case 'win32':
+                        spawn('cmd', ['/c', 'start', '', wrapper.playbackContext.uri]);
+                        break;
+                    case 'linux':
+                        spawn('xdg-open', [wrapper.playbackContext.uri]);
+                        break;
+                    default:
+                        return constants.WRAPPER_RESPONSE_NOT_AVAILABLE;
+                }
+                return constants.WRAPPER_RESPONSE_SUCCESS_INDICATIVE;
+            }
+        return constants.WRAPPER_RESPONSE_NOT_AVAILABLE;
+    }
+    async onSettingsUpdated(context, oldSettings) {
+        await super.onSettingsUpdated(context, oldSettings);
+        if (!this.settings[context].action)
+            await this.setSettings(context, {
+                action: 'open_spotify'
+            });
+        if (!this.settings[context].show)
+            await this.setSettings(context, {
+                show: ['title', 'extra', 'subtitle']
+            });
+        if (!this.settings[context].image_source)
+            await this.setSettings(context, {
+                image_source: 'context'
+            });
+        if (oldSettings.show?.length !== this.settings[context].show?.length || (oldSettings.show && this.settings[context].show && (!oldSettings.show.every((value, index) => value === this.settings[context].show[index]))))
+            await this.#onPlaybackContextChanged(wrapper.playbackContext, wrapper.pendingPlaybackContext, [context], true);
+        if (oldSettings.image_source !== this.settings[context].image_source && wrapper.playbackContext)
+            await this.#updateImage(context, wrapper.playbackContext, wrapper.song, wrapper.pendingPlaybackContext);
+    }
+    async onWillDisappear(ev) {
+        await super.onWillDisappear(ev);
+        this.pauseMarquee(ev.action.id);
+    }
+    async onStateSettled(context) {
+        await super.onStateSettled(context, true);
+        await this.#onPlaybackContextChanged(wrapper.playbackContext, wrapper.pendingPlaybackContext, [context]);
+    }
+    async onStateLoss(context) {
+        await super.onStateLoss(context);
+        this.clearMarquee(context);
+        await this.setTitle(context, '');
+    }
+};
+ContextInformationButton = __decorate([
+    action({ UUID: 'com.ntanis.essentials-for-spotify.context-information-button' }),
+    __metadata("design:paramtypes", [])
+], ContextInformationButton);
+export default ContextInformationButton;

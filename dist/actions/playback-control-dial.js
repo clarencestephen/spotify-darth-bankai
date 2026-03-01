@@ -1,0 +1,230 @@
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+import { action } from '@elgato/streamdeck';
+import { Dial } from './dial.js';
+import constants from './../library/constants.js';
+import images from './../library/images.js';
+import wrapper from './../library/wrapper.js';
+let PlaybackControlDial = class PlaybackControlDial extends Dial {
+    static HOLDABLE = true;
+    #seeking = false;
+    constructor() {
+        super('layouts/playback-control-layout.json', 'images/icons/playback-control.png');
+        wrapper.on('songChanged', this.#onSongChanged.bind(this));
+        wrapper.on('songTimeChanged', this.#onSongTimeChanged.bind(this));
+        wrapper.on('playbackStateChanged', this.#onPlaybackStateChanged.bind(this));
+        wrapper.on('deviceChanged', this.#onDeviceChanged.bind(this));
+        wrapper.on('songLikedStateChanged', (liked, pending = false) => this.#onSongChanged(wrapper.song, wrapper.pendingSongChange));
+    }
+    async #updateJointFeedback(contexts = this.contexts) {
+        if (!wrapper.device)
+            return;
+        for (const context of contexts) {
+            const titleMarquee = this.getMarquee(context, 'title');
+            const timeMarquee = this.getMarquee(context, 'time');
+            this.setFeedback(context, {
+                title: titleMarquee ? titleMarquee.last : 'Playback Control',
+                indicator: {
+                    value: wrapper.song ? Math.round((wrapper.song.progress / wrapper.song.item.duration_ms) * 100) : 0,
+                    opacity: wrapper.playing ? 1.0 : 0.5
+                },
+                icon: {
+                    opacity: wrapper.song || wrapper.pendingSongChange ? 1.0 : 0.5
+                },
+                text: {
+                    value: timeMarquee ? timeMarquee.last : `${this.settings[context].show.includes('progress') ? '??:??' : ''}${this.settings[context].show.includes('progress') && this.settings[context].show.includes('duration') ? ' / ' : ''}${this.settings[context].show.includes('duration') ? '??:??' : ''}`,
+                    opacity: wrapper.playing ? 1.0 : 0.5
+                }
+            });
+        }
+    }
+    async #onSongChanged(song, pending = false, contexts = this.contexts, force = false) {
+        const promises = [];
+        for (const context of contexts)
+            promises.push(new Promise(async (resolve) => {
+                this.setUnpressable(context, true);
+                let titleMarquee = this.getMarquee(context, 'title');
+                let timeMarquee = this.getMarquee(context, 'time');
+                await this.setFeedback(context, {
+                    icon: {
+                        opacity: wrapper.device && (wrapper.song || wrapper.pendingSongChange) ? 1.0 : 0.5
+                    }
+                });
+                if (pending || (song && ((titleMarquee && titleMarquee.id !== song.item.id) || (timeMarquee && timeMarquee.id !== song.item.id))) || ((!song) && titleMarquee && timeMarquee) || force) {
+                    this.clearMarquee(context, 'title');
+                    this.clearMarquee(context, 'time');
+                    titleMarquee = null;
+                    timeMarquee = null;
+                    if ((!force) || (!song))
+                        await this.setFeedback(context, {
+                            title: 'Playback Control',
+                            text: {
+                                value: '??:?? / ??:??',
+                                opacity: wrapper.playing ? 1.0 : 0.5
+                            }
+                        });
+                }
+                if (song) {
+                    if (!images.isSongCached(song))
+                        await this.setIcon(context, 'images/icons/pending.png');
+                    const image = await images.getForSong(song);
+                    const time = this.beautifyTime(song.progress, song.item.duration_ms, this.settings[context].show.includes('progress'), this.settings[context].show.includes('duration'));
+                    await this.setFeedback(context, {
+                        text: {
+                            value: time
+                        }
+                    });
+                    if ((!titleMarquee) || titleMarquee.id !== song.item.id || force) {
+                        const title = `${this.settings[context].show.includes('name') ? song.item.name : ''}${this.settings[context].show.includes('name') && this.settings[context].show.includes('artists') ? ' - ' : ''}${this.settings[context].show.includes('artists') ? song.item.artists.map((artist) => artist.name).join(', ') : ''}`;
+                        await this.marquee(undefined, 'title', title, title, 16, context);
+                    }
+                    else
+                        this.resumeMarquee(context, 'title');
+                    if ((!timeMarquee) || timeMarquee.id !== song.item.id || force)
+                        await this.marquee(undefined, 'time', time === '' ? ' ' : time, time === '' ? ' ' : `${'8'.repeat(time.length - (this.settings[context].show.includes('progress') && this.settings[context].show.includes('duration') ? 5 : 1))}${this.settings[context].show.includes('progress') && this.settings[context].show.includes('duration') ? ': : /' : ':'}`, 14, context);
+                    else
+                        this.resumeMarquee(context, 'time');
+                    if (image)
+                        await this.setIcon(context, this.processImage(`data:image/jpeg;base64,${image}`, this.settings[context].show.includes('liked') && song.liked ? 'top-left' : 'none'));
+                    else if (song.item.uri.includes('local:'))
+                        await this.setIcon(context, 'images/states/local');
+                    else
+                        await this.setIcon(context, this.originalIcon);
+                }
+                else if (wrapper.pendingSongChange)
+                    await this.setIcon(context, 'images/icons/pending.png');
+                else
+                    await this.setIcon(context, this.originalIcon);
+                this.setUnpressable(context, false);
+                resolve(true);
+            }));
+        await Promise.allSettled(promises);
+    }
+    async #onSongTimeChanged(progress, duration, pending = false, contexts = this.contexts) {
+        const promises = [];
+        for (const context of contexts) {
+            const timeMarquee = this.getMarquee(context, 'time');
+            if (timeMarquee) {
+                const time = this.beautifyTime(progress, duration, this.settings[context].show.includes('progress'), this.settings[context].show.includes('duration'));
+                this.updateMarquee(context, 'time', time === '' ? ' ' : time, time === '' ? ' ' : `${'8'.repeat(time.length - (this.settings[context].show.includes('progress') && this.settings[context].show.includes('duration') ? 5 : 1))}${this.settings[context].show.includes('progress') && this.settings[context].show.includes('duration') ? ': : /' : ':'}`);
+            }
+            promises.push(this.#updateJointFeedback([context]));
+        }
+        await Promise.allSettled(promises);
+    }
+    async #onPlaybackStateChanged(state, contexts = this.contexts) {
+        const promises = [];
+        for (const context of contexts)
+            promises.push(this.#updateJointFeedback([context]));
+        await Promise.allSettled(promises);
+    }
+    async #onDeviceChanged(device, contexts = this.contexts) {
+        const promises = [];
+        if (!device) {
+            for (const context of contexts)
+                promises.push(this.resetFeedbackLayout(context));
+            await Promise.allSettled(promises);
+            return;
+        }
+        for (const context of contexts)
+            promises.push(this.#updateJointFeedback([context]));
+        await Promise.allSettled(promises);
+    }
+    async invokeWrapperAction(context, type) {
+        if (type === Dial.TYPES.ROTATE_CLOCKWISE) {
+            if (this.isHolding(context))
+                this.#seeking = true;
+            else
+                this.#seeking = false;
+            if ((!wrapper.song) && wrapper.pendingSongChange)
+                return constants.WRAPPER_RESPONSE_BUSY;
+            else if (!this.isHolding(context))
+                return wrapper.nextSong();
+            else if (wrapper.song && wrapper.song.progress + (this.settings[context].step ?? constants.DEFAULT_SEEK_STEP_SIZE) < wrapper.song.item.duration_ms)
+                return wrapper.forwardSeek(this.settings[context].step ?? constants.DEFAULT_SEEK_STEP_SIZE);
+            else
+                return constants.WRAPPER_RESPONSE_NOT_AVAILABLE;
+        }
+        else if (type === Dial.TYPES.ROTATE_COUNTERCLOCKWISE) {
+            if (this.isHolding(context))
+                this.#seeking = true;
+            else
+                this.#seeking = false;
+            if ((!wrapper.song) && wrapper.pendingSongChange)
+                return constants.WRAPPER_RESPONSE_BUSY;
+            else if (!this.isHolding(context))
+                return wrapper.previousSong();
+            else if (wrapper.song)
+                return wrapper.backwardSeek(this.settings[context].step ?? constants.DEFAULT_SEEK_STEP_SIZE);
+            else
+                return constants.WRAPPER_RESPONSE_NOT_AVAILABLE;
+        }
+        else if (type === Dial.TYPES.TAP)
+            return wrapper.togglePlayback();
+        else if (type === Dial.TYPES.LONG_TAP)
+            return wrapper.toggleCurrentSongLike();
+        else
+            return constants.WRAPPER_RESPONSE_NOT_AVAILABLE;
+    }
+    async invokeHoldWrapperAction(context) {
+        return constants.WRAPPER_RESPONSE_SUCCESS;
+    }
+    async invokeHoldReleaseWrapperAction(context) {
+        if (this.#seeking) {
+            this.#seeking = false;
+            return constants.WRAPPER_RESPONSE_SUCCESS;
+        }
+        if (wrapper.playing)
+            return wrapper.pausePlayback();
+        else
+            return wrapper.resumePlayback();
+    }
+    async onWillDisappear(ev) {
+        await super.onWillDisappear(ev);
+        this.pauseMarquee(ev.action.id, 'title');
+        this.pauseMarquee(ev.action.id, 'time');
+    }
+    async resetFeedbackLayout(context) {
+        await super.resetFeedbackLayout(context, {
+            title: 'Playback Control',
+            icon: this.originalIcon
+        });
+    }
+    async onSettingsUpdated(context, oldSettings) {
+        await super.onSettingsUpdated(context, oldSettings);
+        if (!this.settings[context].show)
+            await this.setSettings(context, {
+                show: ['name', 'artists', 'progress', 'duration', 'liked']
+            });
+        if (!this.settings[context].step)
+            await this.setSettings(context, {
+                step: constants.DEFAULT_SEEK_STEP_SIZE
+            });
+        if (oldSettings.show?.length !== this.settings[context].show?.length || (oldSettings.show && this.settings[context].show && (!oldSettings.show.every((value, index) => value === this.settings[context].show[index]))))
+            await this.#onSongChanged(wrapper.song, wrapper.pendingSongChange, [context], true);
+    }
+    async onStateLoss(context) {
+        await super.onStateLoss(context);
+        this.clearMarquee(context, 'title');
+        this.clearMarquee(context, 'time');
+    }
+    async updateFeedback(context) {
+        await super.updateFeedback(context);
+        await this.#onSongChanged(wrapper.song, false, [context]);
+        await this.#onSongTimeChanged(wrapper.song?.progress, wrapper.song?.item.duration_ms, false, [context]);
+        await this.#onPlaybackStateChanged(wrapper.playing, [context]);
+        await this.#onDeviceChanged(wrapper.device, [context]);
+    }
+};
+PlaybackControlDial = __decorate([
+    action({ UUID: 'com.ntanis.essentials-for-spotify.playback-control-dial' }),
+    __metadata("design:paramtypes", [])
+], PlaybackControlDial);
+export default PlaybackControlDial;
